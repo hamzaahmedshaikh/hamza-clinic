@@ -1,5 +1,6 @@
 import { useAuth } from "@/lib/auth-context";
 import StatCard from "@/components/StatCard";
+import DashboardCharts from "@/components/DashboardCharts";
 import { Users, Calendar, FileText, UserCog, Clock, CheckCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -147,6 +148,8 @@ export default function Dashboard() {
           )}
         </>
       )}
+
+      {(user.role === "admin" || user.role === "doctor") && <DashboardCharts />}
 
       <RecentAppointmentsTable />
     </div>
