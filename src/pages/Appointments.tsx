@@ -12,10 +12,11 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: "bg-destructive/10 text-destructive",
 };
 
-function BookAppointmentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function BookAppointmentModal({ open, onClose, isPatient }: { open: boolean; onClose: () => void; isPatient?: boolean }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ patient_id: "", date: "", time: "", type: "General Checkup" });
+  const [form, setForm] = useState({ patient_id: "", date: "", time: "", type: "General Checkup", notes: "" });
+  const [doctorId, setDoctorId] = useState("");
 
   const { data: patients = [] } = useQuery({
     queryKey: ["patients"],
@@ -23,7 +24,7 @@ function BookAppointmentModal({ open, onClose }: { open: boolean; onClose: () =>
       const { data } = await supabase.from("patients").select("id, name").order("name");
       return data || [];
     },
-    enabled: open,
+    enabled: open && !isPatient,
   });
 
   const { data: doctors = [] } = useQuery({
@@ -38,16 +39,23 @@ function BookAppointmentModal({ open, onClose }: { open: boolean; onClose: () =>
     enabled: open,
   });
 
-  const [doctorId, setDoctorId] = useState("");
-
   const mutation = useMutation({
     mutationFn: async () => {
+      if (!form.date) throw new Error("Date is required");
+      if (!form.time) throw new Error("Time is required");
+      if (!doctorId) throw new Error("Please select a doctor");
+      if (new Date(form.date) < new Date(new Date().toDateString())) throw new Error("Cannot book in the past");
+
+      const patientId = isPatient ? user?.id : form.patient_id;
+      if (!patientId) throw new Error("Please select a patient");
+
       const { error } = await supabase.from("appointments").insert({
-        patient_id: form.patient_id,
-        doctor_id: doctorId || user?.id!,
+        patient_id: patientId,
+        doctor_id: doctorId,
         date: form.date,
         time: form.time,
         type: form.type,
+        notes: form.notes.trim() || null,
         status: "pending",
         created_by: user?.id,
       });
@@ -59,7 +67,7 @@ function BookAppointmentModal({ open, onClose }: { open: boolean; onClose: () =>
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       toast.success("Appointment booked");
       onClose();
-      setForm({ patient_id: "", date: "", time: "", type: "General Checkup" });
+      setForm({ patient_id: "", date: "", time: "", type: "General Checkup", notes: "" });
       setDoctorId("");
     },
     onError: (err: any) => toast.error(err.message),
@@ -75,14 +83,16 @@ function BookAppointmentModal({ open, onClose }: { open: boolean; onClose: () =>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
         </div>
         <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-foreground">Patient *</label>
-            <select required value={form.patient_id} onChange={(e) => setForm({ ...form, patient_id: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20">
-              <option value="">Select patient</option>
-              {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
+          {!isPatient && (
+            <div>
+              <label className="text-sm font-medium text-foreground">Patient *</label>
+              <select required value={form.patient_id} onChange={(e) => setForm({ ...form, patient_id: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20">
+                <option value="">Select patient</option>
+                {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label className="text-sm font-medium text-foreground">Doctor *</label>
             <select required value={doctorId} onChange={(e) => setDoctorId(e.target.value)}
@@ -94,7 +104,7 @@ function BookAppointmentModal({ open, onClose }: { open: boolean; onClose: () =>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-foreground">Date *</label>
-              <input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}
+              <input required type="date" min={new Date().toISOString().split("T")[0]} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}
                 className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20" />
             </div>
             <div>
@@ -109,6 +119,12 @@ function BookAppointmentModal({ open, onClose }: { open: boolean; onClose: () =>
               className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20">
               {["General Checkup", "Follow-up", "Consultation", "Lab Results Review", "Emergency"].map(t => <option key={t}>{t}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-foreground">Notes</label>
+            <textarea value={form.notes} maxLength={500} onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              rows={2} placeholder="Optional notes..."
+              className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20" />
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-card-foreground hover:bg-muted transition-colors">Cancel</button>
@@ -128,7 +144,6 @@ export default function Appointments() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [showBook, setShowBook] = useState(false);
-  const canEdit = user?.role !== "patient";
 
   const { data: appointments = [], isLoading } = useQuery({
     queryKey: ["appointments"],
@@ -152,6 +167,7 @@ export default function Appointments() {
     onError: (err: any) => toast.error(err.message),
   });
 
+  const canEdit = user?.role !== "patient";
   const filtered = appointments
     .filter((a: any) => filter === "all" || a.status === filter)
     .filter((a: any) => (a.patients?.name || "").toLowerCase().includes(search.toLowerCase()));
@@ -163,11 +179,10 @@ export default function Appointments() {
           <h1 className="text-2xl font-bold text-foreground">Appointments</h1>
           <p className="text-sm text-muted-foreground">{appointments.length} total</p>
         </div>
-        {canEdit && (
-          <button onClick={() => setShowBook(true)} className="inline-flex items-center gap-2 rounded-lg gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all">
-            <Plus className="h-4 w-4" /> Book Appointment
-          </button>
-        )}
+        {/* All roles can book (patients can self-book) */}
+        <button onClick={() => setShowBook(true)} className="inline-flex items-center gap-2 rounded-lg gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all">
+          <Plus className="h-4 w-4" /> Book Appointment
+        </button>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -233,7 +248,7 @@ export default function Appointments() {
         </div>
       )}
 
-      <BookAppointmentModal open={showBook} onClose={() => setShowBook(false)} />
+      <BookAppointmentModal open={showBook} onClose={() => setShowBook(false)} isPatient={user?.role === "patient"} />
     </div>
   );
 }

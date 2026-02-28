@@ -3,7 +3,7 @@ import { useAuth, UserRole } from "@/lib/auth-context";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, Calendar, FileText, LogOut,
-  Menu, X, Activity, UserCog, ClipboardList, ChevronRight
+  Menu, X, Activity, UserCog, ClipboardList, ChevronRight, CreditCard
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +20,7 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { label: "Patients", icon: Users, path: "/patients" },
     { label: "Appointments", icon: Calendar, path: "/appointments" },
     { label: "Prescriptions", icon: FileText, path: "/prescriptions" },
+    { label: "Subscription", icon: CreditCard, path: "/subscription" },
   ],
   doctor: [
     { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
