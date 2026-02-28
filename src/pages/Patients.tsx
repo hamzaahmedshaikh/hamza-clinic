@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Plus, Phone, Mail, Droplets, X, Pencil } from "lucide-react";
+import { Search, Plus, Phone, Mail, Droplets, X, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import SmartSymptomChecker from "@/components/SmartSymptomChecker";
 
@@ -130,6 +130,8 @@ export default function Patients() {
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState<false | "add" | any>(false);
   const canEdit = user?.role === "admin" || user?.role === "doctor" || user?.role === "receptionist";
+  const canDelete = user?.role === "admin" || user?.role === "receptionist";
+  const queryClient = useQueryClient();
 
   const { data: patients = [], isLoading } = useQuery({
     queryKey: ["patients"],
@@ -196,6 +198,19 @@ export default function Patients() {
                     <button onClick={(e) => { e.stopPropagation(); setShowForm(patient); }}
                       className="opacity-0 group-hover:opacity-100 rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-all">
                       <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm("Are you sure you want to delete this patient?")) return;
+                      const { error } = await supabase.from("patients").delete().eq("id", patient.id);
+                      if (error) { toast.error(error.message); return; }
+                      queryClient.invalidateQueries({ queryKey: ["patients"] });
+                      toast.success("Patient deleted");
+                    }}
+                      className="opacity-0 group-hover:opacity-100 rounded-lg p-1.5 text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-all">
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   )}
                 </div>
