@@ -2,8 +2,9 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FileText, Download, Plus, Pill, X, Trash2 } from "lucide-react";
+import { FileText, Download, Plus, Pill, X, Trash2, Brain, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
 import PrescriptionExplainer from "@/components/PrescriptionExplainer";
 
 interface Medicine {
@@ -17,14 +18,49 @@ function AddPrescriptionModal({ open, onClose }: { open: boolean; onClose: () =>
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ patient_id: "", diagnosis: "", instructions: "" });
   const [medicines, setMedicines] = useState<Medicine[]>([{ name: "", dosage: "", duration: "" }]);
+  const [symptomInput, setSymptomInput] = useState("");
 
   const { data: patients = [] } = useQuery({
     queryKey: ["patients"],
     queryFn: async () => {
-      const { data } = await supabase.from("patients").select("id, name").order("name");
+      const { data } = await supabase.from("patients").select("id, name, age, gender").order("name");
       return data || [];
     },
     enabled: open,
+  });
+
+  const selectedPatient = patients.find((p: any) => p.id === form.patient_id);
+
+  const aiDiagnosis = useMutation({
+    mutationFn: async () => {
+      if (!symptomInput.trim()) throw new Error("Enter symptoms first");
+      const { data, error } = await supabase.functions.invoke("ai-clinic", {
+        body: {
+          action: "symptom-check",
+          data: {
+            symptoms: symptomInput,
+            age: selectedPatient?.age || "Unknown",
+            gender: selectedPatient?.gender || "Unknown",
+            history: "",
+          },
+        },
+      });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data: any) => {
+      if (data.conditions?.length > 0) {
+        const topCondition = data.conditions[0];
+        setForm((f) => ({
+          ...f,
+          diagnosis: topCondition.name,
+          instructions: f.instructions || data.recommendations || "",
+        }));
+        toast.success(`AI suggests: ${topCondition.name} (${topCondition.probability} probability)`);
+      }
+    },
+    onError: (err: any) => toast.error(err.message || "AI analysis failed"),
   });
 
   const mutation = useMutation({
@@ -49,6 +85,7 @@ function AddPrescriptionModal({ open, onClose }: { open: boolean; onClose: () =>
       onClose();
       setForm({ patient_id: "", diagnosis: "", instructions: "" });
       setMedicines([{ name: "", dosage: "", duration: "" }]);
+      setSymptomInput("");
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -68,12 +105,32 @@ function AddPrescriptionModal({ open, onClose }: { open: boolean; onClose: () =>
             <select required value={form.patient_id} onChange={(e) => setForm({ ...form, patient_id: e.target.value })}
               className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20">
               <option value="">Select patient</option>
-              {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {patients.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
+
+          {/* AI Diagnosis Helper */}
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+            <label className="text-sm font-medium text-primary flex items-center gap-1.5">
+              <Brain className="h-4 w-4" /> AI Diagnosis (Optional)
+            </label>
+            <p className="text-xs text-muted-foreground">Enter symptoms and let AI suggest a diagnosis, or type manually below.</p>
+            <div className="flex gap-2">
+              <input value={symptomInput} onChange={(e) => setSymptomInput(e.target.value)}
+                placeholder="e.g. fever, cough, headache for 3 days"
+                className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none" />
+              <button type="button" onClick={() => aiDiagnosis.mutate()} disabled={aiDiagnosis.isPending}
+                className="rounded-lg gradient-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-1">
+                {aiDiagnosis.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
+                Analyze
+              </button>
+            </div>
+          </div>
+
           <div>
             <label className="text-sm font-medium text-foreground">Diagnosis *</label>
             <input required maxLength={255} value={form.diagnosis} onChange={(e) => setForm({ ...form, diagnosis: e.target.value })}
+              placeholder="Enter diagnosis manually or use AI above"
               className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20" />
           </div>
 
@@ -120,6 +177,119 @@ function AddPrescriptionModal({ open, onClose }: { open: boolean; onClose: () =>
   );
 }
 
+function generatePDF(rx: any) {
+  const meds = (rx.medicines as Medicine[]) || [];
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  // Header
+  doc.setFillColor(16, 185, 129);
+  doc.rect(0, 0, pageWidth, 35, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.setFont("helvetica", "bold");
+  doc.text("Hamza Clinic Hackathon", 15, 18);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.text("AI-Powered Clinic Management System", 15, 26);
+
+  // PRESCRIPTION title
+  doc.setTextColor(30, 30, 30);
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.text("PRESCRIPTION", 15, 50);
+
+  // Line
+  doc.setDrawColor(16, 185, 129);
+  doc.setLineWidth(0.5);
+  doc.line(15, 54, pageWidth - 15, 54);
+
+  // Patient info
+  let y = 65;
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Patient:", 15, y);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 30, 30);
+  doc.text(rx.patients?.name || "—", 55, y);
+
+  y += 10;
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Date:", 15, y);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 30, 30);
+  doc.text(new Date(rx.created_at).toLocaleDateString("en-PK"), 55, y);
+
+  y += 10;
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Diagnosis:", 15, y);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 30, 30);
+  doc.text(rx.diagnosis, 55, y);
+
+  // Medicines table
+  y += 15;
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(16, 185, 129);
+  doc.text("Medicines", 15, y);
+  y += 8;
+
+  // Table header
+  doc.setFillColor(240, 240, 240);
+  doc.rect(15, y - 5, pageWidth - 30, 10, "F");
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(60, 60, 60);
+  doc.text("#", 18, y + 1);
+  doc.text("Medicine", 28, y + 1);
+  doc.text("Dosage", 100, y + 1);
+  doc.text("Duration", 145, y + 1);
+  y += 10;
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(30, 30, 30);
+  meds.forEach((med, i) => {
+    doc.text(`${i + 1}`, 18, y);
+    doc.text(med.name, 28, y);
+    doc.text(med.dosage || "—", 100, y);
+    doc.text(med.duration || "—", 145, y);
+    y += 8;
+  });
+
+  // Instructions
+  if (rx.instructions) {
+    y += 5;
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(16, 185, 129);
+    doc.text("Instructions", 15, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(30, 30, 30);
+    const lines = doc.splitTextToSize(rx.instructions, pageWidth - 30);
+    doc.text(lines, 15, y);
+    y += lines.length * 5;
+  }
+
+  // Footer
+  y += 15;
+  doc.setDrawColor(200, 200, 200);
+  doc.line(15, y, pageWidth - 15, y);
+  y += 8;
+  doc.setFontSize(8);
+  doc.setTextColor(140, 140, 140);
+  doc.text("Generated by Hamza Clinic Hackathon — Developed by Hamza Ahmed Shaikh", 15, y);
+  doc.text("This prescription is digitally generated. Please consult your doctor for any concerns.", 15, y + 5);
+
+  doc.save(`prescription-${rx.patients?.name || "patient"}-${rx.created_at.split("T")[0]}.pdf`);
+  toast.success("Prescription PDF downloaded!");
+}
+
 export default function Prescriptions() {
   const { user } = useAuth();
   const [showAdd, setShowAdd] = useState(false);
@@ -133,30 +303,6 @@ export default function Prescriptions() {
       return data;
     },
   });
-
-  const handleDownload = (rx: any) => {
-    const meds = (rx.medicines as Medicine[]) || [];
-    const content = `
-PRESCRIPTION
-============
-Patient: ${rx.patients?.name || "—"}
-Date: ${new Date(rx.created_at).toLocaleDateString()}
-Diagnosis: ${rx.diagnosis}
-
-Medicines:
-${meds.map((m, i) => `${i + 1}. ${m.name} - ${m.dosage} (${m.duration})`).join("\n")}
-
-${rx.instructions ? `Instructions: ${rx.instructions}` : ""}
-    `.trim();
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `prescription-${rx.patients?.name || "patient"}-${rx.created_at.split("T")[0]}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Prescription downloaded");
-  };
 
   return (
     <div className="space-y-6">
@@ -194,7 +340,7 @@ ${rx.instructions ? `Instructions: ${rx.instructions}` : ""}
                       <p className="text-xs text-muted-foreground">{new Date(rx.created_at).toLocaleDateString()}</p>
                     </div>
                   </div>
-                  <button onClick={() => handleDownload(rx)} className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                  <button onClick={() => generatePDF(rx)} className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Download PDF">
                     <Download className="h-4 w-4" />
                   </button>
                 </div>
@@ -219,7 +365,6 @@ ${rx.instructions ? `Instructions: ${rx.instructions}` : ""}
                 {rx.instructions && (
                   <p className="mt-3 text-xs text-muted-foreground italic border-t border-border pt-3">📝 {rx.instructions}</p>
                 )}
-                {/* AI Prescription Explainer */}
                 <PrescriptionExplainer diagnosis={rx.diagnosis} medicines={meds} instructions={rx.instructions} />
               </div>
             );
