@@ -75,8 +75,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Activity className="h-5 w-5 text-sidebar-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-sidebar-primary-foreground">AI ClinicPro 🇵🇰</h1>
-            <p className="text-[10px] text-sidebar-muted">Smart Clinic Management</p>
+            <h1 className="text-sm font-bold text-sidebar-primary-foreground">Hamza Clinic</h1>
+            <p className="text-[10px] text-sidebar-muted">Hackathon Edition</p>
           </div>
           <button className="ml-auto lg:hidden" onClick={() => setSidebarOpen(false)}>
             <X className="h-5 w-5 text-sidebar-foreground" />
@@ -149,7 +149,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Footer */}
         <footer className="border-t border-border bg-card px-4 py-2 text-center text-xs text-muted-foreground">
-          Developed by <span className="font-semibold text-primary">Hamza Ahmed Shaikh</span> • AI ClinicPro 🇵🇰
+          Developed by <span className="font-semibold text-primary">Hamza Ahmed Shaikh</span> • Hamza Clinic Hackathon 🇵🇰
         </footer>
       </div>
     </div>
