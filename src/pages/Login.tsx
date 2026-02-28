@@ -11,7 +11,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<UserRole>("patient");
+  const role: UserRole = "patient";
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -102,18 +102,6 @@ export default function Login() {
                     className="mt-1.5 w-full rounded-lg border border-input bg-card px-4 py-2.5 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
                     required
                   />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-foreground">Role</label>
-                  <select
-                    value={role} onChange={(e) => setRole(e.target.value as UserRole)}
-                    className="mt-1.5 w-full rounded-lg border border-input bg-card px-4 py-2.5 text-sm text-card-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
-                  >
-                    <option value="patient">Patient</option>
-                    <option value="doctor">Doctor</option>
-                    <option value="receptionist">Receptionist</option>
-                    <option value="admin">Admin</option>
-                  </select>
                 </div>
               </>
             )}
