@@ -244,6 +244,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_doctors: {
+        Args: never
+        Returns: {
+          name: string
+          phone: string
+          user_id: string
+        }[]
+      }
       get_user_plan: { Args: { _user_id: string }; Returns: string }
       get_user_role: {
         Args: { _user_id: string }

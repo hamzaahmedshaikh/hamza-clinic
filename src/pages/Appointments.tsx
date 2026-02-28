@@ -30,11 +30,8 @@ function BookAppointmentModal({ open, onClose, isPatient }: { open: boolean; onC
   const { data: doctors = [] } = useQuery({
     queryKey: ["doctors-list"],
     queryFn: async () => {
-      const { data } = await supabase.from("user_roles").select("user_id").eq("role", "doctor");
-      if (!data || data.length === 0) return [];
-      const ids = data.map(d => d.user_id);
-      const { data: profiles } = await supabase.from("profiles").select("user_id, name").in("user_id", ids);
-      return profiles || [];
+      const { data } = await supabase.rpc("get_doctors");
+      return data || [];
     },
     enabled: open,
   });

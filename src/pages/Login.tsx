@@ -61,9 +61,9 @@ export default function Login() {
           <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-foreground/10 backdrop-blur-sm border border-primary-foreground/20">
             <Activity className="h-10 w-10 text-primary-foreground" />
           </div>
-          <h1 className="text-4xl font-extrabold text-primary-foreground mb-4">ClinicPro</h1>
+          <h1 className="text-4xl font-extrabold text-primary-foreground mb-4">AI ClinicPro 🇵🇰</h1>
           <p className="text-lg text-primary-foreground/80 leading-relaxed">
-            Modern clinic management platform. Digitize patient records, appointments, prescriptions & analytics.
+            Pakistan's smart clinic management platform. AI-powered diagnosis, digital prescriptions, and complete patient care — built for Pakistani healthcare.
           </p>
           <div className="mt-10 grid grid-cols-3 gap-4 text-center">
             {[["500+", "Patients"], ["1,200+", "Appointments"], ["98%", "Satisfaction"]].map(([val, label]) => (
@@ -83,7 +83,7 @@ export default function Login() {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary">
               <Activity className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-foreground">ClinicPro</span>
+            <span className="text-xl font-bold text-foreground">AI ClinicPro 🇵🇰</span>
           </div>
 
           <h2 className="text-2xl font-bold text-foreground">{isSignup ? "Create Account" : "Welcome back"}</h2>
@@ -157,6 +157,9 @@ export default function Login() {
             <button onClick={() => { setIsSignup(!isSignup); setError(""); }} className="font-medium text-primary hover:underline">
               {isSignup ? "Sign In" : "Sign Up"}
             </button>
+          </p>
+          <p className="mt-4 text-center text-xs text-muted-foreground/60">
+            Developed by <span className="font-semibold text-primary">Hamza Ahmed Shaikh</span> 🇵🇰
           </p>
         </div>
       </div>
