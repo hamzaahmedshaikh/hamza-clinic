@@ -42,6 +42,13 @@ function BookAppointmentModal({ open, onClose, isPatient }: { open: boolean; onC
       if (!form.time) throw new Error("Time is required");
       if (!doctorId) throw new Error("Please select a doctor");
       if (new Date(form.date) < new Date(new Date().toDateString())) throw new Error("Cannot book in the past");
+      
+      // Clinic hours: 9 AM - 9 PM, no Sundays
+      const bookingDay = new Date(form.date).getDay();
+      if (bookingDay === 0) throw new Error("Clinic is closed on Sundays");
+      
+      const [hours] = form.time.split(":").map(Number);
+      if (hours < 9 || hours >= 21) throw new Error("Clinic hours are 9:00 AM to 9:00 PM");
 
       let patientId = form.patient_id;
 
@@ -152,8 +159,9 @@ function BookAppointmentModal({ open, onClose, isPatient }: { open: boolean; onC
             </div>
             <div>
               <label className="text-sm font-medium text-foreground">Time *</label>
-              <input required type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })}
+              <input required type="time" min="09:00" max="21:00" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })}
                 className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20" />
+              <p className="text-[10px] text-muted-foreground mt-0.5">Clinic: 9 AM – 9 PM, Closed Sundays</p>
             </div>
           </div>
           <div>

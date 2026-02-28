@@ -14,10 +14,7 @@ export default function Doctors() {
   const { data: receptionists = [], isLoading: loadingReceptionists } = useQuery({
     queryKey: ["receptionists"],
     queryFn: async () => {
-      const roleRes = await supabase.from("user_roles").select("user_id").eq("role", "receptionist");
-      const ids = roleRes.data?.map((r: any) => r.user_id) || [];
-      if (ids.length === 0) return [];
-      const { data } = await supabase.from("profiles").select("user_id, name, phone").in("user_id", ids);
+      const { data } = await supabase.rpc("get_receptionists");
       return data || [];
     },
   });
