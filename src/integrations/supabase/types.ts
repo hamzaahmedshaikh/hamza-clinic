@@ -244,6 +244,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_all_staff: {
+        Args: never
+        Returns: {
+          name: string
+          phone: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }[]
+      }
       get_doctors: {
         Args: never
         Returns: {
@@ -271,6 +280,13 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      update_user_role: {
+        Args: {
+          _new_role: Database["public"]["Enums"]["app_role"]
+          _target_user_id: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
