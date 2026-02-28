@@ -6,11 +6,8 @@ export default function Doctors() {
   const { data: doctors = [], isLoading } = useQuery({
     queryKey: ["doctors"],
     queryFn: async () => {
-      const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "doctor");
-      if (!roles || roles.length === 0) return [];
-      const ids = roles.map(r => r.user_id);
-      const { data: profiles } = await supabase.from("profiles").select("*").in("user_id", ids);
-      return profiles || [];
+      const { data } = await supabase.rpc("get_doctors");
+      return data || [];
     },
   });
 
