@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FileText, Download, Plus, Pill, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import PrescriptionExplainer from "@/components/PrescriptionExplainer";
 
 interface Medicine {
   name: string;
@@ -28,13 +29,17 @@ function AddPrescriptionModal({ open, onClose }: { open: boolean; onClose: () =>
 
   const mutation = useMutation({
     mutationFn: async () => {
+      if (!form.patient_id) throw new Error("Please select a patient");
+      if (!form.diagnosis.trim()) throw new Error("Diagnosis is required");
       const validMeds = medicines.filter(m => m.name.trim());
+      if (validMeds.length === 0) throw new Error("Add at least one medicine");
+
       const { error } = await supabase.from("prescriptions").insert({
         patient_id: form.patient_id,
         doctor_id: user?.id!,
-        diagnosis: form.diagnosis,
+        diagnosis: form.diagnosis.trim(),
         medicines: validMeds as any,
-        instructions: form.instructions || null,
+        instructions: form.instructions.trim() || null,
       });
       if (error) throw error;
     },
@@ -68,7 +73,7 @@ function AddPrescriptionModal({ open, onClose }: { open: boolean; onClose: () =>
           </div>
           <div>
             <label className="text-sm font-medium text-foreground">Diagnosis *</label>
-            <input required value={form.diagnosis} onChange={(e) => setForm({ ...form, diagnosis: e.target.value })}
+            <input required maxLength={255} value={form.diagnosis} onChange={(e) => setForm({ ...form, diagnosis: e.target.value })}
               className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20" />
           </div>
 
@@ -80,13 +85,13 @@ function AddPrescriptionModal({ open, onClose }: { open: boolean; onClose: () =>
             </div>
             {medicines.map((med, i) => (
               <div key={i} className="flex gap-2 mb-2">
-                <input placeholder="Medicine" value={med.name}
+                <input placeholder="Medicine" maxLength={100} value={med.name}
                   onChange={(e) => { const m = [...medicines]; m[i].name = e.target.value; setMedicines(m); }}
                   className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none" />
-                <input placeholder="Dosage" value={med.dosage}
+                <input placeholder="Dosage" maxLength={50} value={med.dosage}
                   onChange={(e) => { const m = [...medicines]; m[i].dosage = e.target.value; setMedicines(m); }}
                   className="w-28 rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none" />
-                <input placeholder="Duration" value={med.duration}
+                <input placeholder="Duration" maxLength={50} value={med.duration}
                   onChange={(e) => { const m = [...medicines]; m[i].duration = e.target.value; setMedicines(m); }}
                   className="w-24 rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none" />
                 {medicines.length > 1 && (
@@ -99,7 +104,7 @@ function AddPrescriptionModal({ open, onClose }: { open: boolean; onClose: () =>
 
           <div>
             <label className="text-sm font-medium text-foreground">Instructions / Notes</label>
-            <textarea value={form.instructions} onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+            <textarea value={form.instructions} maxLength={1000} onChange={(e) => setForm({ ...form, instructions: e.target.value })}
               rows={3} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20" />
           </div>
 
@@ -214,6 +219,8 @@ ${rx.instructions ? `Instructions: ${rx.instructions}` : ""}
                 {rx.instructions && (
                   <p className="mt-3 text-xs text-muted-foreground italic border-t border-border pt-3">📝 {rx.instructions}</p>
                 )}
+                {/* AI Prescription Explainer */}
+                <PrescriptionExplainer diagnosis={rx.diagnosis} medicines={meds} instructions={rx.instructions} />
               </div>
             );
           })}

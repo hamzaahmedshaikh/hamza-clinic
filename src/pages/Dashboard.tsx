@@ -1,28 +1,62 @@
 import { useAuth } from "@/lib/auth-context";
 import StatCard from "@/components/StatCard";
 import DashboardCharts from "@/components/DashboardCharts";
-import { Users, Calendar, FileText, UserCog, Clock, CheckCircle } from "lucide-react";
+import { Users, Calendar, FileText, UserCog, Clock, CheckCircle, DollarSign, Stethoscope } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 
-function useStats() {
+function useStats(userId?: string, role?: string) {
   return useQuery({
-    queryKey: ["dashboard-stats"],
+    queryKey: ["dashboard-stats", userId, role],
     queryFn: async () => {
       const today = new Date().toISOString().split("T")[0];
-      const [patientsRes, appointmentsRes, prescriptionsRes, todayApptsRes, doctorsRes] = await Promise.all([
+
+      const [patientsRes, appointmentsRes, prescriptionsRes, todayApptsRes, doctorsRes, diagnosisRes] = await Promise.all([
         supabase.from("patients").select("id", { count: "exact", head: true }),
         supabase.from("appointments").select("id", { count: "exact", head: true }),
         supabase.from("prescriptions").select("id", { count: "exact", head: true }),
         supabase.from("appointments").select("*").eq("date", today),
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "doctor"),
+        supabase.from("prescriptions").select("diagnosis"),
       ]);
+
+      // Doctor-specific queries
+      let doctorAppts = { count: 0 };
+      let doctorRx = { count: 0 };
+      let doctorTodayData: any[] = [];
+      if (role === "doctor" && userId) {
+        const [da, dr, dt] = await Promise.all([
+          supabase.from("appointments").select("id", { count: "exact", head: true }).eq("doctor_id", userId),
+          supabase.from("prescriptions").select("id", { count: "exact", head: true }).eq("doctor_id", userId),
+          supabase.from("appointments").select("*").eq("doctor_id", userId).eq("date", today),
+        ]);
+        doctorAppts = { count: da.count || 0 };
+        doctorRx = { count: dr.count || 0 };
+        doctorTodayData = dt.data || [];
+      }
+
+      // Most common diagnosis
+      const diagnosisData = diagnosisRes.data || [];
+      const diagCount: Record<string, number> = {};
+      diagnosisData.forEach((d: any) => {
+        if (d.diagnosis) diagCount[d.diagnosis] = (diagCount[d.diagnosis] || 0) + 1;
+      });
+      const topDiagnosis = Object.entries(diagCount).sort((a, b) => b[1] - a[1])[0];
+
+      const todayAppts = todayApptsRes.data || [];
+
       return {
         totalPatients: patientsRes.count || 0,
         totalAppointments: appointmentsRes.count || 0,
         totalPrescriptions: prescriptionsRes.count || 0,
-        todayAppointments: todayApptsRes.data || [],
+        todayAppointments: todayAppts,
         totalDoctors: doctorsRes.count || 0,
+        topDiagnosis: topDiagnosis ? topDiagnosis[0] : "N/A",
+        simulatedRevenue: todayAppts.filter((a: any) => a.status === "completed").length * 50 +
+          (appointmentsRes.count || 0) * 30,
+        doctorAppointments: doctorAppts.count,
+        doctorPrescriptions: doctorRx.count,
+        doctorTodayAppts: doctorTodayData,
       };
     },
   });
@@ -97,7 +131,7 @@ function RecentAppointmentsTable() {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { data: stats, isLoading } = useStats();
+  const { data: stats, isLoading } = useStats(user?.id, user?.role);
 
   if (!user) return null;
 
@@ -120,18 +154,28 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          {(user.role === "admin" || user.role === "doctor") && (
+          {user.role === "admin" && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
               <StatCard title="Total Patients" value={stats?.totalPatients || 0} icon={Users} iconClassName="bg-accent text-accent-foreground" />
               <StatCard title="Today's Appointments" value={todayCount} icon={Calendar} iconClassName="bg-info/10 text-info" />
-              <StatCard title="Prescriptions" value={stats?.totalPrescriptions || 0} icon={FileText} iconClassName="bg-success/10 text-success" />
-              {user.role === "admin" ? (
-                <StatCard title="Active Doctors" value={stats?.totalDoctors || 0} icon={UserCog} iconClassName="bg-warning/10 text-warning" />
-              ) : (
-                <StatCard title="Completed Today" value={completedCount} icon={CheckCircle} iconClassName="bg-success/10 text-success" />
-              )}
+              <StatCard title="Active Doctors" value={stats?.totalDoctors || 0} icon={UserCog} iconClassName="bg-warning/10 text-warning" />
+              <StatCard title="Revenue (Sim.)" value={`$${stats?.simulatedRevenue?.toLocaleString() || 0}`} icon={DollarSign} iconClassName="bg-success/10 text-success" />
+              <StatCard title="Prescriptions" value={stats?.totalPrescriptions || 0} icon={FileText} iconClassName="bg-info/10 text-info" />
+              <StatCard title="Top Diagnosis" value={stats?.topDiagnosis || "N/A"} icon={Stethoscope} iconClassName="bg-warning/10 text-warning" />
+              <StatCard title="Monthly Appts" value={stats?.totalAppointments || 0} icon={Calendar} iconClassName="bg-accent text-accent-foreground" />
+              <StatCard title="Completed Today" value={completedCount} icon={CheckCircle} iconClassName="bg-success/10 text-success" />
             </div>
           )}
+
+          {user.role === "doctor" && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+              <StatCard title="Today's Appointments" value={stats?.doctorTodayAppts?.length || 0} icon={Calendar} iconClassName="bg-info/10 text-info" />
+              <StatCard title="Total Appointments" value={stats?.doctorAppointments || 0} icon={Calendar} iconClassName="bg-accent text-accent-foreground" />
+              <StatCard title="Prescriptions" value={stats?.doctorPrescriptions || 0} icon={FileText} iconClassName="bg-success/10 text-success" />
+              <StatCard title="Completed Today" value={stats?.doctorTodayAppts?.filter((a: any) => a.status === "completed").length || 0} icon={CheckCircle} iconClassName="bg-success/10 text-success" />
+            </div>
+          )}
+
           {user.role === "receptionist" && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
               <StatCard title="Today's Appointments" value={todayCount} icon={Calendar} iconClassName="bg-accent text-accent-foreground" />
@@ -139,6 +183,7 @@ export default function Dashboard() {
               <StatCard title="Patients" value={stats?.totalPatients || 0} icon={Users} iconClassName="bg-info/10 text-info" />
             </div>
           )}
+
           {user.role === "patient" && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
               <StatCard title="Total Appointments" value={stats?.totalAppointments || 0} icon={Calendar} iconClassName="bg-accent text-accent-foreground" />

@@ -13,6 +13,7 @@ import PatientDetail from "./pages/PatientDetail";
 import Appointments from "./pages/Appointments";
 import Prescriptions from "./pages/Prescriptions";
 import Doctors from "./pages/Doctors";
+import Subscription from "./pages/Subscription";
 import DashboardLayout from "./components/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -44,6 +45,7 @@ function AppRoutes() {
         <Route path="/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
         <Route path="/prescriptions" element={<ProtectedRoute><Prescriptions /></ProtectedRoute>} />
         <Route path="/doctors" element={<ProtectedRoute><Doctors /></ProtectedRoute>} />
+        <Route path="/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </>
