@@ -89,7 +89,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             return (
               <button
                 key={item.path}
-                onClick={() => { navigate(item.path); setSidebarOpen(false); }}
+                onClick={() => { setSidebarOpen(false); setTimeout(() => navigate(item.path), 10); }}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
                   active

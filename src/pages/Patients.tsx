@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -103,6 +104,7 @@ function AddPatientModal({ open, onClose }: { open: boolean; onClose: () => void
 
 export default function Patients() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const canEdit = user?.role === "admin" || user?.role === "doctor" || user?.role === "receptionist";
@@ -149,7 +151,7 @@ export default function Patients() {
               {search ? "No patients match your search" : "No patients registered yet. Add your first patient!"}
             </div>
           ) : filtered.map((patient) => (
-            <div key={patient.id} className="rounded-xl border border-border bg-card p-5 shadow-card hover:shadow-card-hover transition-all animate-fade-in">
+            <div key={patient.id} onClick={() => navigate(`/patients/${patient.id}`)} className="rounded-xl border border-border bg-card p-5 shadow-card hover:shadow-card-hover transition-all animate-fade-in cursor-pointer">
               <div className="flex items-start gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-accent-foreground font-semibold text-sm">
                   {patient.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
