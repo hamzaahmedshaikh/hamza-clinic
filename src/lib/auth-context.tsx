@@ -1,49 +1,103 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 export type UserRole = "admin" | "doctor" | "receptionist" | "patient";
 
-export interface User {
+export interface AppUser {
   id: string;
   name: string;
   email: string;
   role: UserRole;
-  avatar?: string;
+  phone?: string;
 }
 
 interface AuthContextType {
-  user: User | null;
-  login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  user: AppUser | null;
+  supabaseUser: SupabaseUser | null;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (email: string, password: string, name: string, role: UserRole) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users for demo
-const MOCK_USERS: Record<string, User & { password: string }> = {
-  "admin@clinic.com": { id: "1", name: "Dr. Sarah Admin", email: "admin@clinic.com", role: "admin", password: "admin123" },
-  "doctor@clinic.com": { id: "2", name: "Dr. James Wilson", email: "doctor@clinic.com", role: "doctor", password: "doctor123" },
-  "reception@clinic.com": { id: "3", name: "Emily Carter", email: "reception@clinic.com", role: "receptionist", password: "rec123" },
-  "patient@clinic.com": { id: "4", name: "John Doe", email: "patient@clinic.com", role: "patient", password: "patient123" },
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    const found = MOCK_USERS[email];
-    if (found && found.password === password) {
-      const { password: _, ...userData } = found;
-      setUser(userData);
-      return true;
+  const fetchUserProfile = async (supaUser: SupabaseUser) => {
+    const [profileRes, roleRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("user_id", supaUser.id).single(),
+      supabase.from("user_roles").select("role").eq("user_id", supaUser.id).single(),
+    ]);
+
+    if (profileRes.data && roleRes.data) {
+      setUser({
+        id: supaUser.id,
+        name: profileRes.data.name,
+        email: supaUser.email || "",
+        role: roleRes.data.role as UserRole,
+        phone: profileRes.data.phone || undefined,
+      });
     }
-    return false;
   };
 
-  const logout = () => setUser(null);
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        setSupabaseUser(session.user);
+        // Use setTimeout to avoid Supabase auth deadlock
+        setTimeout(() => fetchUserProfile(session.user), 0);
+      } else {
+        setSupabaseUser(null);
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setSupabaseUser(session.user);
+        fetchUserProfile(session.user);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  };
+
+  const signup = async (email: string, password: string, name: string, role: UserRole) => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name, role },
+        emailRedirectTo: window.location.origin,
+      },
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setSupabaseUser(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, supabaseUser, login, signup, logout, isAuthenticated: !!user, loading }}>
       {children}
     </AuthContext.Provider>
   );

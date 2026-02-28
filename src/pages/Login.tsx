@@ -1,20 +1,17 @@
 import { useState } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, UserRole } from "@/lib/auth-context";
 import { useNavigate } from "react-router-dom";
 import { Activity, Eye, EyeOff, ArrowRight } from "lucide-react";
-
-const DEMO_ACCOUNTS = [
-  { role: "Admin", email: "admin@clinic.com", password: "admin123" },
-  { role: "Doctor", email: "doctor@clinic.com", password: "doctor123" },
-  { role: "Receptionist", email: "reception@clinic.com", password: "rec123" },
-  { role: "Patient", email: "patient@clinic.com", password: "patient123" },
-];
+import { toast } from "sonner";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, signup } = useAuth();
   const navigate = useNavigate();
+  const [isSignup, setIsSignup] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [role, setRole] = useState<UserRole>("patient");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,23 +20,27 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const success = await login(email, password);
-    setLoading(false);
-    if (success) {
-      navigate("/dashboard");
-    } else {
-      setError("Invalid email or password");
-    }
-  };
 
-  const handleDemoLogin = async (email: string, password: string) => {
-    setEmail(email);
-    setPassword(password);
-    setError("");
-    setLoading(true);
-    const success = await login(email, password);
-    setLoading(false);
-    if (success) navigate("/dashboard");
+    if (isSignup) {
+      if (!name.trim()) { setError("Name is required"); setLoading(false); return; }
+      if (password.length < 6) { setError("Password must be at least 6 characters"); setLoading(false); return; }
+      const result = await signup(email, password, name, role);
+      setLoading(false);
+      if (result.success) {
+        toast.success("Account created! Please check your email to verify, then sign in.");
+        setIsSignup(false);
+      } else {
+        setError(result.error || "Signup failed");
+      }
+    } else {
+      const result = await login(email, password);
+      setLoading(false);
+      if (result.success) {
+        navigate("/dashboard");
+      } else {
+        setError(result.error || "Invalid credentials");
+      }
+    }
   };
 
   return (
@@ -51,8 +52,7 @@ export default function Login() {
             <div key={i} className="absolute rounded-full border border-primary-foreground/20"
               style={{
                 width: `${200 + i * 120}px`, height: `${200 + i * 120}px`,
-                top: "50%", left: "50%",
-                transform: "translate(-50%, -50%)",
+                top: "50%", left: "50%", transform: "translate(-50%, -50%)",
               }}
             />
           ))}
@@ -86,10 +86,37 @@ export default function Login() {
             <span className="text-xl font-bold text-foreground">ClinicPro</span>
           </div>
 
-          <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Sign in to your account to continue</p>
+          <h2 className="text-2xl font-bold text-foreground">{isSignup ? "Create Account" : "Welcome back"}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {isSignup ? "Sign up to get started" : "Sign in to your account to continue"}
+          </p>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            {isSignup && (
+              <>
+                <div>
+                  <label className="text-sm font-medium text-foreground">Full Name</label>
+                  <input
+                    type="text" value={name} onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter your full name"
+                    className="mt-1.5 w-full rounded-lg border border-input bg-card px-4 py-2.5 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground">Role</label>
+                  <select
+                    value={role} onChange={(e) => setRole(e.target.value as UserRole)}
+                    className="mt-1.5 w-full rounded-lg border border-input bg-card px-4 py-2.5 text-sm text-card-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
+                  >
+                    <option value="patient">Patient</option>
+                    <option value="doctor">Doctor</option>
+                    <option value="receptionist">Receptionist</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </>
+            )}
             <div>
               <label className="text-sm font-medium text-foreground">Email</label>
               <input
@@ -120,27 +147,17 @@ export default function Login() {
               type="submit" disabled={loading}
               className="flex w-full items-center justify-center gap-2 rounded-lg gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50"
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? (isSignup ? "Creating..." : "Signing in...") : (isSignup ? "Create Account" : "Sign In")}
               {!loading && <ArrowRight className="h-4 w-4" />}
             </button>
           </form>
 
-          {/* Demo accounts */}
-          <div className="mt-8">
-            <p className="text-xs font-medium text-muted-foreground mb-3">Quick Demo Login</p>
-            <div className="grid grid-cols-2 gap-2">
-              {DEMO_ACCOUNTS.map((acc) => (
-                <button
-                  key={acc.role}
-                  onClick={() => handleDemoLogin(acc.email, acc.password)}
-                  className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-card-foreground hover:bg-accent hover:text-accent-foreground transition-all text-left"
-                >
-                  <span className="block font-semibold">{acc.role}</span>
-                  <span className="text-muted-foreground">{acc.email}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            {isSignup ? "Already have an account?" : "Don't have an account?"}{" "}
+            <button onClick={() => { setIsSignup(!isSignup); setError(""); }} className="font-medium text-primary hover:underline">
+              {isSignup ? "Sign In" : "Sign Up"}
+            </button>
+          </p>
         </div>
       </div>
     </div>

@@ -1,9 +1,121 @@
 import { useState } from "react";
-import { patients } from "@/lib/mock-data";
-import { Search, Plus, User, Phone, Mail, Droplets } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Search, Plus, Phone, Mail, Droplets, X } from "lucide-react";
+import { toast } from "sonner";
+
+function AddPatientModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({ name: "", age: "", gender: "Male", phone: "", email: "", blood_group: "", address: "" });
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("patients").insert({
+        name: form.name,
+        age: parseInt(form.age),
+        gender: form.gender,
+        phone: form.phone || null,
+        email: form.email || null,
+        blood_group: form.blood_group || null,
+        address: form.address || null,
+        created_by: user?.id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patients"] });
+      toast.success("Patient added successfully");
+      onClose();
+      setForm({ name: "", age: "", gender: "Male", phone: "", email: "", blood_group: "", address: "" });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-card-hover animate-fade-in mx-4">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-lg font-semibold text-card-foreground">Add New Patient</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+        </div>
+        <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-foreground">Name *</label>
+              <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground">Age *</label>
+              <input required type="number" min={0} max={150} value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-foreground">Gender *</label>
+              <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20">
+                <option>Male</option><option>Female</option><option>Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground">Blood Group</label>
+              <select value={form.blood_group} onChange={(e) => setForm({ ...form, blood_group: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20">
+                <option value="">Select</option>
+                {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(g => <option key={g}>{g}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-foreground">Phone</label>
+              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground">Email</label>
+              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20" />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-foreground">Address</label>
+            <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })}
+              className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20" />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-card-foreground hover:bg-muted transition-colors">Cancel</button>
+            <button type="submit" disabled={mutation.isPending} className="flex-1 rounded-lg gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all">
+              {mutation.isPending ? "Adding..." : "Add Patient"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default function Patients() {
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const canEdit = user?.role === "admin" || user?.role === "doctor" || user?.role === "receptionist";
+
+  const { data: patients = [], isLoading } = useQuery({
+    queryKey: ["patients"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("patients").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const filtered = patients.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -13,50 +125,55 @@ export default function Patients() {
           <h1 className="text-2xl font-bold text-foreground">Patients</h1>
           <p className="text-sm text-muted-foreground">{patients.length} registered patients</p>
         </div>
-        <button className="inline-flex items-center gap-2 rounded-lg gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all">
-          <Plus className="h-4 w-4" /> Add Patient
-        </button>
+        {canEdit && (
+          <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-2 rounded-lg gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all">
+            <Plus className="h-4 w-4" /> Add Patient
+          </button>
+        )}
       </div>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <input
-          value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search patients..."
-          className="w-full rounded-lg border border-input bg-card pl-10 pr-4 py-2.5 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
-        />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search patients..."
+          className="w-full rounded-lg border border-input bg-card pl-10 pr-4 py-2.5 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all" />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((patient) => (
-          <div key={patient.id} className="rounded-xl border border-border bg-card p-5 shadow-card hover:shadow-card-hover transition-all animate-fade-in">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-accent-foreground font-semibold text-sm">
-                {patient.name.split(" ").map(n => n[0]).join("")}
+      {isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[...Array(3)].map((_, i) => <div key={i} className="h-48 rounded-xl border border-border bg-card animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.length === 0 ? (
+            <div className="col-span-full text-center py-12 text-muted-foreground">
+              {search ? "No patients match your search" : "No patients registered yet. Add your first patient!"}
+            </div>
+          ) : filtered.map((patient) => (
+            <div key={patient.id} className="rounded-xl border border-border bg-card p-5 shadow-card hover:shadow-card-hover transition-all animate-fade-in">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-accent-foreground font-semibold text-sm">
+                  {patient.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-card-foreground truncate">{patient.name}</h3>
+                  <p className="text-xs text-muted-foreground">{patient.age}y • {patient.gender}</p>
+                </div>
+                {patient.blood_group && (
+                  <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground flex items-center gap-1">
+                    <Droplets className="h-3 w-3" /> {patient.blood_group}
+                  </span>
+                )}
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-card-foreground truncate">{patient.name}</h3>
-                <p className="text-xs text-muted-foreground">{patient.age}y • {patient.gender}</p>
+              <div className="mt-4 space-y-2 text-xs text-muted-foreground">
+                {patient.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5" /> {patient.phone}</div>}
+                {patient.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /> {patient.email}</div>}
               </div>
-              <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground flex items-center gap-1">
-                <Droplets className="h-3 w-3" /> {patient.bloodGroup}
-              </span>
             </div>
-            <div className="mt-4 space-y-2 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5" /> {patient.phone}</div>
-              <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /> {patient.email}</div>
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button className="flex-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-card-foreground hover:bg-muted transition-colors">
-                View Profile
-              </button>
-              <button className="flex-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground hover:bg-accent/80 transition-colors">
-                Book Appt
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      <AddPatientModal open={showAdd} onClose={() => setShowAdd(false)} />
     </div>
   );
 }

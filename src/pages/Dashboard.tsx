@@ -1,88 +1,68 @@
 import { useAuth } from "@/lib/auth-context";
 import StatCard from "@/components/StatCard";
-import { Users, Calendar, FileText, Activity, UserCog, TrendingUp, Clock, CheckCircle } from "lucide-react";
-import { appointments, patients, prescriptions } from "@/lib/mock-data";
+import { Users, Calendar, FileText, UserCog, Clock, CheckCircle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
-function AdminDashboard() {
-  const todayAppts = appointments.filter(a => a.date === "2026-02-28");
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Patients" value={patients.length} icon={Users} trend="12% vs last month" trendUp iconClassName="bg-accent text-accent-foreground" />
-        <StatCard title="Today's Appointments" value={todayAppts.length} icon={Calendar} trend="3 pending" iconClassName="bg-info/10 text-info" />
-        <StatCard title="Prescriptions" value={prescriptions.length} icon={FileText} trend="5 this week" trendUp iconClassName="bg-success/10 text-success" />
-        <StatCard title="Active Doctors" value={3} icon={UserCog} iconClassName="bg-warning/10 text-warning" />
-      </div>
-      <RecentAppointmentsTable />
-    </div>
-  );
+function useStats() {
+  return useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const [patientsRes, appointmentsRes, prescriptionsRes, todayApptsRes, doctorsRes] = await Promise.all([
+        supabase.from("patients").select("id", { count: "exact", head: true }),
+        supabase.from("appointments").select("id", { count: "exact", head: true }),
+        supabase.from("prescriptions").select("id", { count: "exact", head: true }),
+        supabase.from("appointments").select("*").eq("date", today),
+        supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "doctor"),
+      ]);
+      return {
+        totalPatients: patientsRes.count || 0,
+        totalAppointments: appointmentsRes.count || 0,
+        totalPrescriptions: prescriptionsRes.count || 0,
+        todayAppointments: todayApptsRes.data || [],
+        totalDoctors: doctorsRes.count || 0,
+      };
+    },
+  });
 }
 
-function DoctorDashboard() {
-  const myAppts = appointments.filter(a => a.doctorName === "Dr. James Wilson");
-  const todayAppts = myAppts.filter(a => a.date === "2026-02-28");
-  const completed = myAppts.filter(a => a.status === "completed").length;
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Today's Appointments" value={todayAppts.length} icon={Calendar} iconClassName="bg-accent text-accent-foreground" />
-        <StatCard title="My Patients" value={patients.length} icon={Users} iconClassName="bg-info/10 text-info" />
-        <StatCard title="Completed" value={completed} icon={CheckCircle} iconClassName="bg-success/10 text-success" />
-        <StatCard title="Prescriptions Written" value={prescriptions.length} icon={FileText} iconClassName="bg-warning/10 text-warning" />
-      </div>
-      <RecentAppointmentsTable />
-    </div>
-  );
+function useRecentAppointments() {
+  return useQuery({
+    queryKey: ["recent-appointments"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("appointments")
+        .select("*, patients(name)")
+        .order("created_at", { ascending: false })
+        .limit(5);
+      return data || [];
+    },
+  });
 }
 
-function ReceptionistDashboard() {
-  const todayAppts = appointments.filter(a => a.date === "2026-02-28");
-  const pending = todayAppts.filter(a => a.status === "pending").length;
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard title="Today's Appointments" value={todayAppts.length} icon={Calendar} iconClassName="bg-accent text-accent-foreground" />
-        <StatCard title="Pending Confirmation" value={pending} icon={Clock} iconClassName="bg-warning/10 text-warning" />
-        <StatCard title="Registered Patients" value={patients.length} icon={Users} iconClassName="bg-info/10 text-info" />
-      </div>
-      <RecentAppointmentsTable />
-    </div>
-  );
-}
-
-function PatientDashboard() {
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard title="My Appointments" value={2} icon={Calendar} iconClassName="bg-accent text-accent-foreground" />
-        <StatCard title="Prescriptions" value={1} icon={FileText} iconClassName="bg-info/10 text-info" />
-        <StatCard title="Next Visit" value="Mar 1" icon={Clock} iconClassName="bg-success/10 text-success" />
-      </div>
-      <RecentAppointmentsTable />
-    </div>
-  );
-}
+const STATUS_STYLES: Record<string, string> = {
+  confirmed: "bg-success/10 text-success",
+  pending: "bg-warning/10 text-warning",
+  completed: "bg-info/10 text-info",
+  cancelled: "bg-destructive/10 text-destructive",
+};
 
 function RecentAppointmentsTable() {
-  const statusStyles: Record<string, string> = {
-    confirmed: "bg-success/10 text-success",
-    pending: "bg-warning/10 text-warning",
-    completed: "bg-info/10 text-info",
-    cancelled: "bg-destructive/10 text-destructive",
-  };
+  const { data: appointments, isLoading } = useRecentAppointments();
+
+  if (isLoading) return <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">Loading...</div>;
 
   return (
     <div className="rounded-xl border border-border bg-card shadow-card animate-fade-in">
       <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <h3 className="font-semibold text-card-foreground">Recent Appointments</h3>
-        <span className="text-xs text-muted-foreground">{appointments.length} total</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left">
               <th className="px-5 py-3 font-medium text-muted-foreground">Patient</th>
-              <th className="px-5 py-3 font-medium text-muted-foreground">Doctor</th>
               <th className="px-5 py-3 font-medium text-muted-foreground">Date</th>
               <th className="px-5 py-3 font-medium text-muted-foreground">Time</th>
               <th className="px-5 py-3 font-medium text-muted-foreground">Type</th>
@@ -90,20 +70,23 @@ function RecentAppointmentsTable() {
             </tr>
           </thead>
           <tbody>
-            {appointments.slice(0, 5).map((apt) => (
-              <tr key={apt.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                <td className="px-5 py-3 font-medium text-card-foreground">{apt.patientName}</td>
-                <td className="px-5 py-3 text-muted-foreground">{apt.doctorName}</td>
-                <td className="px-5 py-3 text-muted-foreground">{apt.date}</td>
-                <td className="px-5 py-3 text-muted-foreground">{apt.time}</td>
-                <td className="px-5 py-3 text-muted-foreground">{apt.type}</td>
-                <td className="px-5 py-3">
-                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${statusStyles[apt.status]}`}>
-                    {apt.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {(!appointments || appointments.length === 0) ? (
+              <tr><td colSpan={5} className="px-5 py-8 text-center text-muted-foreground">No appointments yet</td></tr>
+            ) : (
+              appointments.map((apt: any) => (
+                <tr key={apt.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="px-5 py-3 font-medium text-card-foreground">{apt.patients?.name || "—"}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{apt.date}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{apt.time}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{apt.type}</td>
+                  <td className="px-5 py-3">
+                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[apt.status] || ""}`}>
+                      {apt.status}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -113,7 +96,13 @@ function RecentAppointmentsTable() {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { data: stats, isLoading } = useStats();
+
   if (!user) return null;
+
+  const todayCount = stats?.todayAppointments.length || 0;
+  const pendingCount = stats?.todayAppointments.filter((a: any) => a.status === "pending").length || 0;
+  const completedCount = stats?.todayAppointments.filter((a: any) => a.status === "completed").length || 0;
 
   return (
     <div>
@@ -121,10 +110,45 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold text-foreground">Welcome back, {user.name.split(" ")[0]}!</h1>
         <p className="text-sm text-muted-foreground mt-1">Here's what's happening today at the clinic.</p>
       </div>
-      {user.role === "admin" && <AdminDashboard />}
-      {user.role === "doctor" && <DoctorDashboard />}
-      {user.role === "receptionist" && <ReceptionistDashboard />}
-      {user.role === "patient" && <PatientDashboard />}
+
+      {isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-28 rounded-xl border border-border bg-card animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <>
+          {(user.role === "admin" || user.role === "doctor") && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+              <StatCard title="Total Patients" value={stats?.totalPatients || 0} icon={Users} iconClassName="bg-accent text-accent-foreground" />
+              <StatCard title="Today's Appointments" value={todayCount} icon={Calendar} iconClassName="bg-info/10 text-info" />
+              <StatCard title="Prescriptions" value={stats?.totalPrescriptions || 0} icon={FileText} iconClassName="bg-success/10 text-success" />
+              {user.role === "admin" ? (
+                <StatCard title="Active Doctors" value={stats?.totalDoctors || 0} icon={UserCog} iconClassName="bg-warning/10 text-warning" />
+              ) : (
+                <StatCard title="Completed Today" value={completedCount} icon={CheckCircle} iconClassName="bg-success/10 text-success" />
+              )}
+            </div>
+          )}
+          {user.role === "receptionist" && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+              <StatCard title="Today's Appointments" value={todayCount} icon={Calendar} iconClassName="bg-accent text-accent-foreground" />
+              <StatCard title="Pending" value={pendingCount} icon={Clock} iconClassName="bg-warning/10 text-warning" />
+              <StatCard title="Patients" value={stats?.totalPatients || 0} icon={Users} iconClassName="bg-info/10 text-info" />
+            </div>
+          )}
+          {user.role === "patient" && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+              <StatCard title="Total Appointments" value={stats?.totalAppointments || 0} icon={Calendar} iconClassName="bg-accent text-accent-foreground" />
+              <StatCard title="Prescriptions" value={stats?.totalPrescriptions || 0} icon={FileText} iconClassName="bg-info/10 text-info" />
+              <StatCard title="Pending" value={pendingCount} icon={Clock} iconClassName="bg-warning/10 text-warning" />
+            </div>
+          )}
+        </>
+      )}
+
+      <RecentAppointmentsTable />
     </div>
   );
 }
