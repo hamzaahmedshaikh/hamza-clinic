@@ -43,7 +43,53 @@ function BookAppointmentModal({ open, onClose, isPatient }: { open: boolean; onC
       if (!doctorId) throw new Error("Please select a doctor");
       if (new Date(form.date) < new Date(new Date().toDateString())) throw new Error("Cannot book in the past");
 
-      const patientId = isPatient ? user?.id : form.patient_id;
+      let patientId = form.patient_id;
+
+      if (isPatient) {
+        if (!user?.id) throw new Error("You must be signed in");
+
+        const { data: ownPatient, error: ownPatientError } = await supabase
+          .from("patients")
+          .select("id")
+          .eq("created_by", user.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (ownPatientError) throw ownPatientError;
+
+        if (ownPatient?.id) {
+          patientId = ownPatient.id;
+        } else {
+          const { data: emailPatient, error: emailPatientError } = await supabase
+            .from("patients")
+            .select("id")
+            .eq("email", user.email)
+            .limit(1)
+            .maybeSingle();
+
+          if (emailPatientError) throw emailPatientError;
+
+          if (emailPatient?.id) {
+            patientId = emailPatient.id;
+          } else {
+            const { data: createdPatient, error: createPatientError } = await supabase
+              .from("patients")
+              .insert({
+                name: user.name?.trim() || "Patient",
+                age: 0,
+                gender: "other",
+                email: user.email || null,
+                created_by: user.id,
+              })
+              .select("id")
+              .single();
+
+            if (createPatientError) throw createPatientError;
+            patientId = createdPatient.id;
+          }
+        }
+      }
+
       if (!patientId) throw new Error("Please select a patient");
 
       const { error } = await supabase.from("appointments").insert({
